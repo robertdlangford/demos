@@ -243,7 +243,7 @@
             
             var strURL = 'http://www.google.co.uk/maps/place/' + ll.lat + ',' + ll.lon
             
-            $('body').append('<a target="_blank" href="' + strURL + '">Open in Google Maps</a>');
+            $('#resultDiv').html('<a target="_blank" href="' + strURL + '">Open in Google Maps</a>');
             
             console.log(ll);
 
@@ -254,5 +254,6 @@
 <body>
 <input id="input-osgb" type="text" value="SK 087 929">
 <button onclick="convert()">Convert</button>
+<div id="resultDiv"></div>
 </body>
 </html>
