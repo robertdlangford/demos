@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Convert between Latitude/Longitude &amp; OS National Grid Reference points</title>
+    <meta charset="utf-8">
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script>
+        function OsGridRef(easting, northing) {
+            // allow instantiation without 'new'
+            if (!(this instanceof OsGridRef)) return new OsGridRef(easting, northing);
+
+            this.easting = Math.floor(Number(easting));   // truncate if necessary to left of 1m grid square
+            this.northing = Math.floor(Number(northing)); // truncate if necessary to bottom of 1m grid square
+        }
+
+        function OGBLatLng(lat, lon)
+        {
+        this.lat = lat;
+        this.lon = lon;
+        }
+
+        function WGS84LatLng(lat, lon)
+        {
+        this.lat = lat;
+        this.lon = lon;
+        }
+
+        OsGridRef.parse = function(gridref) {
+            gridref = String(gridref).trim();
+            // get numeric values of letter references, mapping A->0, B->1, C->2, etc:
+            var l1 = gridref.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
+            var l2 = gridref.toUpperCase().charCodeAt(1) - 'A'.charCodeAt(0);
+            // shuffle down letters after 'I' since 'I' is not used in grid:
+            // shuffle down letters after 'I' since 'I' is not used in grid:
+            if (l1 > 7) l1--;
+            if (l2 > 7) l2--;
+
+            // convert grid letters into 100km-square indexes from false origin (grid square SV):
+            var e = ((l1-2)%5)*5 + (l2%5);
+            var n = (19-Math.floor(l1/5)*5) - Math.floor(l2/5);
+            if (e<0 || e>6 || n<0 || n>12) return new OsGridRef(NaN, NaN);
+
+            // skip grid letters to get numeric part of ref, stripping any spaces:
+            gridref = gridref.slice(2).replace(/ /g,'');
+
+            // append numeric part of references to grid index:
+            e += gridref.slice(0, gridref.length/2);
+            n += gridref.slice(gridref.length/2);
+
+            // normalise to 1m grid, rounding up to centre of grid square:
+            switch (gridref.length) {
+                case 0: e += '50000'; n += '50000'; break;
+                case 2: e += '5000'; n += '5000'; break;
+                case 4: e += '500'; n += '500'; break;
+                case 6: e += '50'; n += '50'; break;
+                case 8: e += '5'; n += '5'; break;
+                case 10: break; // 10-digit refs are already 1m
+                default: return new OsGridRef(NaN, NaN);
+            }
+
+            return new OsGridRef(e, n);
+        };
+
+        function convertOsgbToGoogle(easting, northing) {
+            var osgbLatLon = NEtoLL(easting, northing);
+            var wgs84LatLon = OGBToWGS84(osgbLatLon.lat, osgbLatLon.lon, 0);
+            // return wgs84LatLon.lat + ", " + wgs84LatLon.lon;
+            return wgs84LatLon;
+        }
+
+        function NEtoLL (east, north){
+
+        //metres in, degrees out
+
+        var K0 = 0.9996012717; // grid scale factor on central meridean
+        var OriginLat = 49.0;
+        var OriginLong = -2.0;
+        var OriginX = 400000; // 400 kM
+        var OriginY = -100000; // 100 kM
+        var a = 6377563.396; // Airy Spheroid
+        var b = 6356256.910;
+
+        var e2;
+        var ex;
+        var n1;
+        var n2;
+        var n3;
+        var OriginNorthings;
+
+
+        // compute interim values
+        a = a * K0;
+        b = b * K0;
+
+        n1 = (a - b)/(a + b);
+        n2 = n1 * n1;
+        n3 = n2 * n1;
+
+        lat = OriginLat * Math.PI / 180.0; // to radians
+
+
+        e2 = (a*a - b*b)/(a*a); // first eccentricity
+        ex = (a*a - b*b)/(b*b); // second eccentricity
+
+
+        OriginNorthings = b*lat + b*(n1*(1.0 + 5.0*n1*(1.0+n1)/4.0)*lat
+        - 3.0*n1*(1.0+n1*(1.0+7.0*n1/8.0))*Math.sin(lat)*Math.cos(lat)
+        + (15.0*n1*(n1+n2)/8.0)*Math.sin(2.0*lat)*Math.cos(2.0*lat)
+        - (35.0*n3/24.0)*Math.sin(3.0*lat)*Math.cos(3.0*lat) );
+
+        var OriginLat = 49.0;
+        var OriginLong = -2.0;
+        var OriginX = 400000; // 400 kM
+        var OriginY = -100000; // 100 kM
+
+
+        var lat; // what we calculate
+        var lon;
+
+        var northing = north - OriginY;
+        var easting = east - OriginX;
+
+        var nu, phid, phid2, t2, t, q2, c, s, nphid, dnphid; // temps
+        var nu2, nudivrho, invnurho, rho, eta2;
+
+
+        /* Evaluate M term: latitude of the northing on the centre meridian */
+
+        northing += OriginNorthings;
+
+        phid = northing / (b*(1.0 + n1 + 5.0*(n2+n3)/4.0)) - 1.0;
+        phid2 = phid + 1.0;
+
+        while (Math.abs(phid2 - phid) > 1E-6)
+        {
+        phid = phid2;
+        nphid = b*phid + b*(n1*(1.0 + 5.0*n1*(1.0+n1)/4.0)*phid
+        - 3.0*n1*(1.0+n1*(1.0+7.0*n1/8.0))*Math.sin(phid)*Math.cos(phid)
+        + (15.0*n1*(n1+n2)/8.0)*Math.sin(2.0*phid)*Math.cos(2.0*phid)
+        - (35.0*n3/24.0)*Math.sin(3.0*phid)*Math.cos(3.0*phid) );
+
+        dnphid = b*((1.0+n1+5.0*(n2+n3)/4.0)-3.0*(n1+n2+7.0*n3/8.0)*Math.cos(2.0*phid)
+        +(15.0*(n2+n3)/4.0)*Math.cos(4*phid)-(35.0*n3/8.0)*Math.cos(6.0*phid));
+
+        phid2 = phid - (nphid - northing)/dnphid;
+        }
+
+        c = Math.cos(phid);
+        s = Math.sin(phid);
+        t = Math.tan(phid);
+        t2 = t*t;
+        q2 = easting*easting;
+
+
+        nu2 = (a*a)/(1.0 - e2*s*s);
+        nu = Math.sqrt(nu2);
+
+        nudivrho = a*a*c*c/(b*b) - c*c + 1.0;
+
+        eta2 = nudivrho - 1;
+
+        rho = nu / nudivrho;
+
+        invnurho = ((1.0-e2*s*s)*(1.0-e2*s*s))/(a*a*(1.0-e2));
+
+        lat = phid - t*q2*invnurho/2.0 + (q2*q2*(t/(24*rho*nu2*nu)*(5 + (3*t2) + eta2 -(9*t2*eta2))));
+
+        lon = (easting/(c*nu))
+        - (easting*q2*((nudivrho+2.0*t2)/(6.0*nu2))/(c*nu))
+        + (q2*q2*easting*(5 + (28*t2) + (24*t2*t2))/(120*nu2*nu2*nu*c));
+
+        return new OGBLatLng(lat * 180.0 / Math.PI,(lon * 180.0 / Math.PI) + OriginLong);
+
+        }
+
+        function OGBToWGS84(OGlat, OGlon, height) {
+        var deg2rad = Math.PI / 180;
+        var rad2deg = 180.0 / Math.PI;
+
+        //first off convert to radians
+        var radOGlat = OGlat * deg2rad;
+        var radOGlon = OGlon * deg2rad;
+        //these are the values for WGS84(GRS80) to OSGB36(Airy)
+
+        var a2 = 6378137; // WGS84_AXIS
+        var e2 = 0.00669438037928458; // WGS84_ECCENTRIC
+
+        var h = height; // height above datum (from $GPGGA sentence)
+
+        var a = 6377563.396; // OSGB_AXIS
+        var e = 0.0066705397616; // OSGB_ECCENTRIC
+
+        var xp = 446.448;
+        var yp = -125.157;
+        var zp = 542.06;
+        var xr = 0.1502;
+        var yr = 0.247;
+        var zr = 0.8421;
+
+        var s = -20.4894;
+
+        // convert to cartesian; lat, lon are in radians
+        var sf = s * 0.000001;
+        var v = a / (Math.sqrt(1 - (e * (Math.sin(radOGlat) * Math.sin(radOGlat)))));
+        var x = (v + h) * Math.cos(radOGlat) * Math.cos(radOGlon);
+        var y = (v + h) * Math.cos(radOGlat) * Math.sin(radOGlon);
+        var z = ((1 - e) * v + h) * Math.sin(radOGlat);
+
+        // transform cartesian
+        var xrot = (xr / 3600) * deg2rad;
+        var yrot = (yr / 3600) * deg2rad;
+        var zrot = (zr / 3600) * deg2rad;
+        var hx = x + (x * sf) - (y * zrot) + (z * yrot) + xp;
+        var hy = (x * zrot) + y + (y * sf) - (z * xrot) + yp;
+        var hz = (-1 * x * yrot) + (y * xrot) + z + (z * sf) + zp;
+
+        // Convert back to lat, lon
+        var newLon = Math.atan(hy / hx);
+        var p = Math.sqrt((hx * hx) + (hy * hy));
+        var newLat = Math.atan(hz / (p * (1 - e2)));
+        v = a2 / (Math.sqrt(1 - e2 * (Math.sin(newLat) * Math.sin(newLat))));
+        var errvalue = 1.0;
+        var lat0 = 0;
+        while (errvalue > 0.001)
+        {
+        lat0 = Math.atan((hz + e2 * v * Math.sin(newLat)) / p);
+        errvalue = Math.abs(lat0 - newLat);
+        newLat = lat0;
+        }
+
+        //convert back to degrees
+        newLat = newLat * rad2deg;
+        newLon = newLon * rad2deg;
+
+        return new WGS84LatLng(newLat, newLon);
+
+        }
+
+        function convert() {
+            var grid = OsGridRef.parse($('#input-osgb').val())
+            
+            ll = convertOsgbToGoogle(grid.easting, grid.northing);
+            
+            var strURL = 'http://www.google.co.uk/maps/place/' + ll.lat + ',' + ll.lon
+            
+            $('body').append('<a target="_blank" href="' + strURL + '">Open in Google Maps</a>');
+            
+            console.log(ll);
+
+        }
+    </script>
+</head>
+
+<body>
+<input id="input-osgb" type="text" value="SK 087 929">
+<button onclick="convert()">Convert</button>
+</body>
+</html>
